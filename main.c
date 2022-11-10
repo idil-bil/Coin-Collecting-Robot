@@ -4,28 +4,16 @@
 #define F_CPU 60000000L
 #define SYSTEM_CLK 30000000L
 #define DEFAULT_F 100000L // For a 10us servo resolution
-
-/// -----------------------
 #define MOT1_POS GPIO_B2
 #define MOT1_NEG GPIO_B3
 #define MOT2_POS GPIO_B10
 #define MOT2_NEG GPIO_B11
-
-
-//----------------------
+#define PIN_PERIOD (GPIO_B13) // Read period from PIO0_13 (pin 3)
 
 volatile int ISR_pwm1=150, ISR_pwm2=150, ISR_cnt=0;
-
-//-----------------------------------------------
-
-// sets initial position of servos
 volatile unsigned int servo_cnt = 0;
 volatile unsigned int servo_upper = 130; // 210 means a pulse of 2.1ms
 volatile unsigned int servo_lower = 190; // 230 means a pulse of 2.3ms
-
-
-
-///---------------------------------------------
 
 void InitTimer(void)
 {
@@ -64,8 +52,7 @@ void InitTimer(void)
 	NVIC_ISER0|=BIT9; // Enable SCT interrupts in NVIC
 }
 
-void Reload_SCTIMER (unsigned long Dly)
-{
+void Reload_SCTIMER (unsigned long Dly) {
 	SCTIMER_CTRL |= BIT2; // halt SCTimer
 	SCTIMER_MATCH0 = Dly; // Set delay period 
 	SCTIMER_MATCHREL0 = Dly;
@@ -73,32 +60,28 @@ void Reload_SCTIMER (unsigned long Dly)
 	SCTIMER_CTRL &= ~BIT2;	// Remove halt on SCTimer	
 }
 
-void STC_IRQ_Handler(void)
-{
-		SCTIMER_EVFLAG = 0x01; // Clear interrupt flag
+void STC_IRQ_Handler(void) {
+	SCTIMER_EVFLAG = 0x01; // Clear interrupt flag
 	servo_cnt++;
+
 	if(servo_cnt==2000) servo_cnt=0; // Period of servo signal is 20ms
-	if(servo_cnt<=servo_upper)
-	{
+
+	if(servo_cnt<=servo_upper)  {
 		GPIO_B9 = 1;
 	}
-	else
-	{
+	else  {
 		GPIO_B9 = 0;
 	}
 	
-	if(servo_cnt<=servo_lower)
-	{
+	if(servo_cnt<=servo_lower)  {
 		GPIO_B1 = 1;
 	}
-	else
-	{
+	else  {
 		GPIO_B1 = 0;
 	}
 }
 
-void wait_1ms(void)
-{
+void wait_1ms(void) {
 	// For SysTick info check the LPC824 manual page 317 in chapter 20.
 	SYST_RVR = (F_CPU/1000L) - 1;  // set reload register, counter rolls over from zero, hence -1
 	SYST_CVR = 0; // load the SysTick counter
@@ -107,9 +90,7 @@ void wait_1ms(void)
 	SYST_CSR = 0x00; // Disable Systick counter
 }
 
-void wait_us(unsigned int us)
-
-{
+void wait_us(unsigned int us) {
 	// For SysTick info check the LPC824 manual page 317 in chapter 20.
 	//SYST_RVR = ((F_CPU*us)/1000000L) - 1;  // set reload register, counter rolls over from zero, hence -1
 	SYST_RVR = (60*us) - 1;  // set reload register, counter rolls over from zero, hence -1
@@ -120,65 +101,53 @@ void wait_us(unsigned int us)
 	SYST_CSR = 0x00; // Disable Systick counter
 }
 
-void waitms(int len)
-{
+void waitms(int len)  {
 	while(len--) wait_1ms();
 }
 
-#define PIN_PERIOD (GPIO_B13) // Read period from PIO0_13 (pin 3)
-
-// GetPeriod() seems to work fine for frequencies between 400Hz and 400kHz.
-long int GetPeriod (int n)
-{
+long int GetPeriod (int n)  {
 	int i;
 	unsigned int saved_TCNT1a, saved_TCNT1b;
 	
 	SYST_RVR = 0xffffff;  // 24-bit counter set to check for signal present
 	SYST_CVR = 0xffffff; // load the SysTick counter
 	SYST_CSR = 0x05; // Bit 0: ENABLE, BIT 1: TICKINT, BIT 2:CLKSOURCE
-	while (PIN_PERIOD!=0) // Wait for square wave to be 0
-	{
+
+	while (PIN_PERIOD!=0) {  // Wait for square wave to be 0
 		if(SYST_CSR & BIT16) return 0;
 	}
-	SYST_CSR = 0x00; // Disable Systick counter
 
+	SYST_CSR = 0x00; // Disable Systick counter
 	SYST_RVR = 0xffffff;  // 24-bit counter set to check for signal present
 	SYST_CVR = 0xffffff; // load the SysTick counter
 	SYST_CSR = 0x05; // Bit 0: ENABLE, BIT 1: TICKINT, BIT 2:CLKSOURCE
-	while (PIN_PERIOD==0) // Wait for square wave to be 1
-	{
+
+	while (PIN_PERIOD==0) {  // Wait for square wave to be 1
 		if(SYST_CSR & BIT16) return 0;
 	}
+
 	SYST_CSR = 0x00; // Disable Systick counter
-	
 	SYST_RVR = 0xffffff;  // 24-bit counter reset
 	SYST_CVR = 0xffffff; // load the SysTick counter to initial value
-	SYST_CSR = 0x05; // Bit 0: ENABLE, BIT 1: TICKINT, BIT 2:CLKSOURCE
-	for(i=0; i<n; i++) // Measure the time of 'n' periods
-	{
-		while (PIN_PERIOD!=0) // Wait for square wave to be 0
-		{
+	SYST_CSR = 0x05; // Bit 0: ENABLE, BIT 1: TICKINT, BIT 2:CLKSOURCE\
+
+	for(i=0; i<n; i++) {  // Measure the time of 'n' periods
+		while (PIN_PERIOD!=0) {  // Wait for square wave to be 0
 			if(SYST_CSR & BIT16) return 0;
 		}
-		while (PIN_PERIOD==0) // Wait for square wave to be 1
-		{
+		while (PIN_PERIOD==0) {  // Wait for square wave to be 1
 			if(SYST_CSR & BIT16) return 0;
 		}
 	}
 	SYST_CSR = 0x00; // Disable Systick counter
-
 	return 0xffffff-SYST_CVR;
 }
 
-void ConfigPins(void)
-{
+void ConfigPins(void)  {
 	GPIO_DIR0 &= ~(BIT13);  // Configure PIO0_13 as input (pin 2).
 	GPIO_DIR0 |= BIT14;    // check ISR rate Configure PIO0_14 as output (pin 20).
-	
-	
 	SWM_PINENABLE0 |= BIT4; // Disable SWCLK on pin PIO0_3
 	GPIO_DIR0 |= BIT3;    // Configure PIO0_3  as output (pin 7).
-	
 	SWM_PINENABLE0 |= BIT5; // Disable SWIO on pin PIO0_2
 	GPIO_DIR0 |= BIT2;    // Configure PIO0_2  as output (pin 8).
 	
@@ -191,37 +160,20 @@ void ConfigPins(void)
 	GPIO_DIR0 |= BIT9;    // upper servo Configure PIO0_9  as output (pin 13).
 }
 
-/* Start ADC calibration */
-void ADC_Calibration(void)
-{
+void ADC_Calibration(void)  {  /* Start ADC calibration */
 	unsigned int saved_ADC_CTRL;
 
-	// Follow the instructions from the user manual (21.3.4 Hardware self-calibration)
-	
-	//To calibrate the ADC follow these steps:
-	
-	//1. Save the current contents of the ADC CTRL register if different from default.	
 	saved_ADC_CTRL=ADC_CTRL;
-	// 2. In a single write to the ADC CTRL register, do the following to start the
-	//    calibration:
-	//    – Set the calibration mode bit CALMODE.
-	//    – Write a divider value to the CLKDIV bit field that divides the system
-	//      clock to yield an ADC clock of about 500 kHz.
-	//    – Clear the LPWR bit.
 	ADC_CTRL = BIT30 | ((300/5)-1); // BIT30=CALMODE, BIT10=LPWRMODE, BIT7:0=CLKDIV
-	// 3. Poll the CALMODE bit until it is cleared.
+
 	while(ADC_CTRL&BIT30);
-	// Before launching a new A/D conversion, restore the contents of the CTRL
-	// register or use the default values.
 	ADC_CTRL=saved_ADC_CTRL;
 }
 
-
-void InitADC(void)
-{
-	// Will use pins 1 and 2 of TSSOP-20 package (PIO_23 and PIO_17) for ADC.
+void InitADC(void)  {
+	// Will use pins 1 and 2 of the TSSOP-20 package (PIO_23 and PIO_17) for ADC.
 	// These correspond to ADC Channel 3 and 9.  Also connect the
-	// VREFN pin (pin 17 of TSSOP-20) to GND, and VREFP the
+	// VREF pin (pin 17 of TSSOP-20) to GND, and VREFP the
 	// pin (pin 17 of TSSOP-20) to VDD (3.3V).
 	
 	SYSCON_PDRUNCFG &= ~BIT4; // Power up the ADC
@@ -234,10 +186,7 @@ void InitADC(void)
 	SWM_PINENABLE0 &= ~BIT22; // Enable the ADC function on PIO_17 (ADC_9, pin 2 of TSSOP20)	
 }
 
-// WARNING: in order to use the ADC with other pins, the pins need to be configured in
-// the function above.
-int ReadADC(int channel)
-{
+int ReadADC(int channel)  {
 	ADC_SEQA_CTRL &= ~BIT31; // Ensure SEQA_ENA is disabled before making changes
 	ADC_SEQA_CTRL &= 0xfffff000; // Deselect all previously selected channels	
 	ADC_SEQA_CTRL |= (1<<channel); // Select Channel	
@@ -247,59 +196,49 @@ int ReadADC(int channel)
 	return ( (ADC_SEQA_GDAT >> 4) & 0xfff);
 }
 
-
-//-------------------------------------------------
-//motor functions:
-void stop(void) //stops motors when called
-{
+void stop(void) { //stops motors when called 
     MOT1_POS=0;
     MOT1_NEG=0;
     MOT2_POS=0;
     MOT2_NEG=0;
 }
 
-void forward(void) //drives forward when called
-{
+void forward(void) { //drives forward when called
     MOT1_POS=1;
     MOT1_NEG=0;
     MOT2_POS=1;
     MOT2_NEG=0;
 }
 
-void backward(void) //drives backward when called
-{
+void backward(void) { //drives backward when called
     MOT1_POS=0;
     MOT1_NEG=1;
     MOT2_POS=0;
     MOT2_NEG=1;
 }
 
-void clockwise(void) //turns clockwise when called
-{
+void clockwise(void) {//turns clockwise when called
     MOT1_POS=0;
     MOT1_NEG=1;
     MOT2_POS=1;
     MOT2_NEG=0;
 }
 
-void counter_clockwise(void) //turns counter clockwise when called
-{
+void counter_clockwise(void) {  //turns counter clockwise when called
     MOT1_POS=1;
     MOT1_NEG=0;
     MOT2_POS=0;
     MOT2_NEG=1;
 }
 
-void move_arm(void)
-{
+// index = 0 keeps arm in resting position, = 1 picks up the coin, = 2 drops coins in box
+void move_arm(void)  {
     #define SIZE 3
     int upper_sequence[SIZE] = {210, 150, 210}; // movement sequence for upper servo
     int lower_sequence[SIZE] = {230, 230, 80}; // movement sequence for lower servo
     int i;
     initUART(115200);
     enable_interrupts();
-    
-
    	
     for(i = 0; i < SIZE; i++) {
 	servo_upper = upper_sequence[i];
@@ -308,27 +247,12 @@ void move_arm(void)
      }	 		
 }
 
-//------------------------------------------------
-
-// In order to keep this as nimble as possible, avoid
-// using floating point or printf on any of its forms!
-void main(void)
-{
-
-
-//-------------------------------
-	#define SIZE 3
-	int upper_sequence[SIZE] = {190, 260, 170}; // movement sequence for upper servo
-	int lower_sequence[SIZE] = {130, 130, 90}; // movement sequence for lower servo
-	int i = 0;
-	
-//-------------------------------
-	int j, v1, v2;
-	int coins=0;
+void main(void)  {
+	int j, v1, v2; // v1 reads from ADC channel 3, v2 reads from channel 9
+	int coins=0;  // keeps track of number of coins picked up, stops after 20 coins
 	int period;
 	long int count, f;
 	unsigned char LED_toggle=0;
-	
 	
 	ConfigPins();	
 	initUART(115200);
@@ -345,70 +269,16 @@ void main(void)
 	eputs("Generates servo PWMs on PIO0_1, PIO0_9 (pins 12, 13 of TSSOP20 package)\r\n");
 	eputs("WARNING: PIO0_11 (pin 9) and PIO0_10 (pin 10) need external pull-up resistors to 3.3V (1k seems to work)\r\n");
 	
-	while(coins <20)	
-	{
+	while(coins < 20)  {  // sequence repeats until 20 coins are picked up
 		forward();
-		waitms(100);
+
+		// continually calculates and prints the period at each iteration
 		period = GetPeriod(35);
 		PrintNumber(period, 10, 7);
 		eputs("\r\n");
-		/*
-		if(period < 36900)
-		{
-			backward();
-			waitms(300);
-			stop();
-			// normal resting position
-			servo_upper = upper_sequence[0];
-			waitms(500);
-			servo_lower = lower_sequence[0];
-				
-			waitms(500);
-			waitms(500);
-				
-			servo_upper = upper_sequence[1];
-			waitms(500);
-			servo_lower = lower_sequence[1];
-				
-			GPIO_B15 = 1; // pin 11, turns on electromagnet
-			eputs("working\r\n");
-				
-			waitms(500);
-			counter_clockwise();
-			waitms(400);
-			clockwise();
-			waitms(400);
-			stop();
-			waitms(1000);
-				
-			servo_upper = upper_sequence[2];
-			waitms(500);
-			servo_lower = lower_sequence[2];
-				
-			waitms(500);
-			waitms(500);
-			waitms(500);
-				
-			coins++;
-			eputs("coin!\r\n");
-			GPIO_B15 = 0;
-			// function for moving to normal position
-				
-			waitms(500);
-			waitms(500);
-			waitms(500);
-				
-			// normal resting position
-			servo_upper = upper_sequence[0];
-			servo_lower = lower_sequence[0];
-			waitms(2000);
-		}
-		*/
 		waitms(100);
-		/*
-		forward();
-		//waitms(400);
-		*/
+
+		// reads and prints the voltage from channel 3
 		j=ReadADC(3);
 		v1=(j*33000)/0xfff;
 		eputs("ADC[3]=0x");
@@ -419,6 +289,7 @@ void main(void)
 		PrintNumber(v1%10000, 10, 4);
 		eputs("V ");;
 		
+		// reads and prints the voltage from channel 9
 		j=ReadADC(9);
 		v2=(j*33000)/0xfff;
 		eputs("ADC[9]=0x");
@@ -427,167 +298,48 @@ void main(void)
 		PrintNumber(v2/10000, 10, 1);
 		eputc('.');
 		PrintNumber(v2%10000, 10, 4);
-		eputs("V ");;
-		/*
-		if(v2 > 7000)
-		{
-			eputs("turn around\r\n");
+		eputs("V ");
+
+		if ((v1/10000 > 1.1) || (v2/10000 > 1.1)) { // turns around if the current carrying wire (perimeter) is detected from either of the ADC channels
 			backward();
-			waitms(1000);
-			counter_clockwise();
+    			waitms(500);
+    			clockwise();
+    			waitms(500);
+    			stop();
+		}
+
+		if (period < 36900)  {  // if period is less than threshold, coin is detected
+			backward();
+			waitms(300);
+			stop();
+
+			servo_upper = upper_sequence[0];  // normal resting position
+			servo_lower = lower_sequence[0];
 			waitms(500);
+
+			servo_upper = upper_sequence[1];  // picks up the coin
+			servo_lower = lower_sequence[1];
+
+			GPIO_B15 = 1; // pin 11, turns on electromagnet
+			waitms(500);
+
+			// turns slightly to ensure even smaller coins are reached
+			counter_clockwise();  
+			waitms(400);
+			clockwise();
+			waitms(400);
+			stop();
+			waitms(1000);
+
+			servo_upper = upper_sequence[2];  // drops coin into box
+			servo_lower = lower_sequence[2];
+			waitms(500);
+
+			coins++;  // incremented each time coin is detected and collected
+			GPIO_B15 = 0;  // turns off the electromagnet
+
+			servo_upper = upper_sequence[0];  // normal resting position
+			servo_lower = lower_sequence[0];
 		}
-		*/
-	//eputs("Coins");
-		//waitms(500);
-		
-	///function go forwards
-	/*
-	if (v2/10000 > 1.1) {
-		eputs("Test");
-		backward();
-    	waitms(500);
-    	clockwise();
-    	waitms(2000);
-    	stop();
-	}
-	
-	if (v1/10000 > 1.1) {
-	eputs("Test");
-		backward();
-    	waitms(500);
-    	clockwise();
-    	waitms(2000);
-    	stop();
-	}
-	
-	for(int counter=0;counter<100;counter++){
-		GPIO_B14 = 1;	
-		count=GetPeriod(35);
-		GPIO_B14 = 0;
-	
-		
-		if(count>0)
-		{
-		eputs("Coins");
-			f=(F_CPU*35L)/count;
-			eputs("f=");
-			PrintNumber(f, 10, 7);
-			eputs("Hz, count=");
-			PrintNumber(count, 10, 6);
-			eputs("          \r");
-			//eputs("TESTTEST");
-			//waitms (500);
-	 		//	GPIO_B3 = 1 ;
-			//eputs("GPIO_B3=1");
-			//waitms (500);
-		//	waitms (500);
-			GPIO_B3 =0 ; // PIN 7
-			//waitms (500);
-			//waitms (500);
-				
-			// function for picking up a coin
-				
-			// resting position
-		}
-			//stop();
-			if (f > 23050){
-				eputs("Pickup");
-				stop();
-				waitms(100);
-				backward();
-		      	waitms(200);
-		      	 stop();
-			
-				// normal resting position
-				servo_upper = upper_sequence[0];
-				waitms(500);
-				servo_lower = lower_sequence[0];
-				
-				waitms(500);
-				waitms(500);
-				
-				servo_upper = upper_sequence[1];
-				waitms(500);
-				servo_lower = lower_sequence[1];
-				
-				GPIO_B15 = 1; // pin 11, turns on electromagnet
-				eputs("working");
-				
-				waitms(500);
-				waitms(500);
-				waitms(500);
-				
-				servo_upper = upper_sequence[2];
-				waitms(500);
-				servo_lower = lower_sequence[2];
-				
-				waitms(500);
-				waitms(500);
-				waitms(500);
-				
-				coins++;
-				GPIO_B15 = 0;
-				// function for moving to normal position
-				
-				waitms(500);
-				waitms(500);
-				waitms(500);
-				
-				// normal resting position
-				servo_upper = upper_sequence[0];
-				servo_lower = lower_sequence[0];
-				
-				}
-			
-			//waitms(300);
-			
-		}
-		*/
-	/*else
-	{
-		eputs("NO SIGNAL                     \r");
-	}*/
-	/*
-	forward();
-	
-	// Now toggle the pins on/off to see if they are working.
-	// First turn all off:
-	//	GPIO_B3=0;
-		GPIO_B2=0;
-		GPIO_B11=0;
-		GPIO_B10=0;
-		GPIO_B15=0;
-		GPIO_B1=0;
-		GPIO_B9=0;
-		// Now turn on one of outputs per cycle to check
-		switch (LED_toggle++)
-		{
-			case 0:
-				//GPIO_B3=1;
-				break;
-			case 1:
-		//		GPIO_B2=1;
-				break;
-			case 2:
-		//		GPIO_B11=1;
-				break;
-			case 3:
-		//		GPIO_B10=1;
-				break;
-			case 4:
-		//		GPIO_B15=1;
-				break;
-			default:
-				break;
-		}
-	//if(LED_toggle>4) 
-		//LED_toggle=0;
-		
-		waitms(200);	
-	}
-	forward();
-	*/
 	}
 }
-
